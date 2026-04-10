@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processador de CSV para XLS Pro</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <style>
+        :root {
+            --bg-grad-1: #0f172a;
+            --bg-grad-2: #1e1b4b;
+            --card-bg: rgba(255, 255, 255, 0.04);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --accent-glow: rgba(99, 102, 241, 0.4);
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --radius: 16px;
+            --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--bg-grad-1) 0%, var(--bg-grad-2) 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            line-height: 1.5;
+            overflow-x: hidden;
+        }
+
+        /* Ambient glowing circles */
+        .ambient-glow {
+            position: fixed;
+            width: 400px;
+            height: 400px;
+            border-radius: 50%;
+            background: var(--accent);
+            filter: blur(120px);
+            opacity: 0.15;
+            z-index: -1;
+            top: -100px;
+            left: -100px;
+            animation: float 10s ease-in-out infinite;
+        }
+
+        .ambient-glow.two {
+            background: #ec4899;
+            top: auto;
+            bottom: -150px;
+            right: -100px;
+            left: auto;
+            animation-duration: 12s;
+            animation-delay: -5s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(20px) scale(1.05); }
+        }
+
+        .container { width: 100%; max-width: 640px; z-index: 10; position: relative; }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+            position: relative;
+        }
+
+        .btn-settings {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-main);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-settings:hover {
+            background: rgba(255,255,255,0.1);
+            color: var(--accent);
+            transform: translateY(-50%) rotate(45deg);
+        }
+
+        h1 {
+            font-weight: 700;
+            font-size: 2.25rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #ffffff, #a5b4fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        header p { color: var(--text-muted); font-size: 1rem; }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            padding: 2.5rem;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .step { margin-bottom: 2.5rem; position: relative; }
+        .step:not(:last-child)::after {
+            content: '';
+            position: absolute; left: 17px; top: 40px; bottom: -20px;
+            width: 2px; background: rgba(255,255,255,0.05); z-index: 0;
+        }
+
+        .step-header {
+            display: flex; align-items: center; gap: 1rem;
+            margin-bottom: 0.5rem; position: relative; z-index: 1;
+        }
+
+        .step-number {
+            width: 36px; height: 36px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-weight: 600; color: var(--accent);
+            box-shadow: 0 0 15px rgba(0,0,0,0.2); transition: all 0.3s;
+        }
+
+        .step.active .step-number {
+            background: var(--accent); color: white;
+            box-shadow: 0 0 20px var(--accent-glow); border-color: var(--accent-hover);
+        }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+        .tab-btn {
+            background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); color: var(--text-muted);
+            padding: 0.85rem 1.5rem; border-radius: 8px; font-family: inherit; font-size: 0.95rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+        }
+        .tab-btn:hover { background: rgba(0,0,0,0.3); color: #cbd5e1; }
+        .tab-btn.active {
+            background: var(--accent); color: white; border-color: var(--accent-hover);
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+
+        .step h2 { font-size: 1.15rem; font-weight: 600; color: #e2e8f0; }
+
+        .step-desc { color: var(--text-muted); font-size: 0.9rem; margin-left: 52px; margin-bottom: 1rem; }
+
+        .input-group { margin-left: 52px; }
+
+        /* Drag and Drop Zone */
+        .drop-zone {
+            border: 2px dashed rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 2rem 1rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: rgba(0,0,0,0.15);
+            cursor: pointer;
+            position: relative;
+        }
+        .drop-zone:hover { border-color: rgba(255,255,255,0.4); background: rgba(0,0,0,0.25); }
+        .drop-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(99, 102, 241, 0.1);
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.2) inset;
+        }
+        .drop-zone .icon { width: 40px; height: 40px; color: var(--accent); margin-bottom: 1rem; opacity: 0.8; }
+        .drop-zone p { color: #cbd5e1; font-weight: 500; margin-bottom: 0.5rem; }
+        .drop-zone span { color: var(--text-muted); font-size: 0.85rem; }
+        input[type="file"] { display: none; }
+
+        /* Encoding Setup */
+        .file-settings-row { display: flex; gap: 1rem; margin-top: 1rem; }
+        .select-input {
+            background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-main); border-radius: 8px; padding: 0.5rem 1rem; outline: none;
+            font-family: inherit; font-size: 0.85rem; flex: 1;
+        }
+        .select-input:focus { border-color: var(--accent); }
+
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+            padding: 0.75rem 1.5rem; border-radius: 8px; font-family: inherit; font-weight: 500;
+            font-size: 0.95rem; cursor: pointer; transition: all 0.2s ease; border: none; outline: none; width: 100%;
+        }
+
+        .btn svg { width: 20px; height: 20px; }
+
+        .btn-outline { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-main); }
+        .btn-outline:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); }
+
+        .btn-primary { background: var(--accent); color: white; box-shadow: 0 4px 14px var(--accent-glow); }
+        .btn-primary:hover:not(:disabled) { background: var(--accent-hover); transform: translateY(-1px); }
+        .btn-primary:disabled { background: #334155; color: #94a3b8; cursor: not-allowed; box-shadow: none; transform: none; }
+
+        .file-list {
+            list-style: none; margin-top: 1rem; max-height: 200px; overflow-y: auto; border-radius: 8px;
+        }
+        .file-list::-webkit-scrollbar { width: 6px; }
+        .file-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+
+        .file-item {
+            background: rgba(0, 0, 0, 0.2); padding: 0.6rem 1rem; margin-bottom: 0.3rem;
+            border-radius: 6px; font-size: 0.85rem; display: flex; align-items: center; justify-content: space-between;
+            color: #cbd5e1; border: 1px solid transparent;
+        }
+        .file-item-left { display: flex; align-items: center; gap: 0.5rem; overflow: hidden; }
+        .file-item-left svg { width: 14px; height: 14px; color: var(--accent); flex-shrink: 0; }
+        .file-item-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        .btn-preview {
+            background: transparent; border: none; color: var(--text-muted); cursor: pointer;
+            padding: 0.2rem; border-radius: 4px; display: flex; align-items: center; transition: all 0.2s;
+        }
+        .btn-preview:hover { color: var(--accent); background: rgba(255,255,255,0.05); }
+
+        .destination-display {
+            background: rgba(0, 0, 0, 0.2); padding: 0.75rem 1rem; border-radius: 8px;
+            display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: #cbd5e1;
+            margin-top: 0.75rem; border: 1px dashed rgba(255, 255, 255, 0.1);
+        }
+        .destination-display.has-path { border-style: solid; border-color: var(--accent); background: rgba(99, 102, 241, 0.05); }
+
+        .action-section { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+
+        /* Progress Bar & Stats */
+        .progress-container { display: none; margin-top: 1.5rem; }
+        .progress-header { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-muted); }
+        .progress-track { width: 100%; height: 8px; background: rgba(0,0,0,0.3); border-radius: 4px; overflow: hidden; }
+        .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s ease; box-shadow: 0 0 10px var(--accent-glow); }
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1rem; text-align: center; }
+        .stat-box { background: rgba(0,0,0,0.15); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.03); }
+        .stat-value { font-size: 1.25rem; font-weight: 700; color: #f8fafc; }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-box.success .stat-value { color: var(--success); }
+        .stat-box.removed .stat-value { color: var(--warning); }
+
+        /* Loaders & Icons */
+        .loader {
+            border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--accent);
+            border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite; display: none;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        button.processing .loader { display: inline-block; }
+        button.processing > svg:not(.loader) { display: none; }
+        .icon { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+        /* Toast Notifications */
+        .toast-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 1000; }
+        .toast {
+            background: var(--card-bg); backdrop-filter: blur(12px); border-radius: 8px; padding: 1rem 1.25rem;
+            color: #f8fafc; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; align-items: flex-start; gap: 1rem;
+            border: 1px solid var(--card-border); max-width: 350px; transform: translateX(120%);
+            animation: slideIn 0.3s forwards cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .toast.closing { animation: slideOut 0.3s forwards cubic-bezier(0.16, 1, 0.3, 1); }
+        .toast.success { border-left: 4px solid var(--success); }
+        .toast.error { border-left: 4px solid var(--error); }
+        .toast.info { border-left: 4px solid var(--accent); }
+        .toast-icon { margin-top: 2px; }
+        .toast.success .toast-icon { color: var(--success); }
+        .toast.error .toast-icon { color: var(--error); }
+        .toast.info .toast-icon { color: var(--accent); }
+        .toast-content { flex: 1; font-size: 0.9rem; }
+        .toast-title { font-weight: 600; margin-bottom: 0.2rem; }
+        @keyframes slideIn { to { transform: translateX(0); } }
+        @keyframes slideOut { to { transform: translateX(120%); opacity: 0; } }
+
+        /* Modals */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+            display: none; justify-content: center; align-items: center; z-index: 100;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .modal-overlay.active { display: flex; opacity: 1; }
+        .modal {
+            background: #1e293b; border: 1px solid rgba(255,255,255,0.1);
+            border-radius: var(--radius); width: 90%; max-width: 500px;
+            box-shadow: var(--shadow-lg); transform: translateY(20px); transition: transform 0.3s;
+            overflow: hidden; display: flex; flex-direction: column;
+        }
+        .modal-overlay.active .modal { transform: translateY(0); }
+        .modal-header {
+            padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2);
+        }
+        .modal-header h3 { font-size: 1.1rem; font-weight: 600; }
+        .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; transition: color 0.2s; }
+        .modal-close:hover { color: white; }
+        .modal-body { padding: 1.5rem; max-height: 70vh; overflow-y: auto; }
+        .modal-body::-webkit-scrollbar { width: 6px; }
+        .modal-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        .modal-footer { padding: 1rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: flex-end; gap: 1rem; background: rgba(0,0,0,0.2); }
+        
+
+
+        /* Preview Table */
+        .preview-modal { max-width: 800px; width: 95%; }
+        .table-responsive { width: 100%; overflow-x: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; }
+        .table-responsive::-webkit-scrollbar { height: 8px; }
+        .table-responsive::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; }
+        th { background: rgba(0,0,0,0.3); padding: 0.75rem 1rem; font-weight: 600; color: #f8fafc; border-bottom: 1px solid rgba(255,255,255,0.1); white-space: nowrap; }
+        td { padding: 0.5rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); color: #cbd5e1; white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+        .empty-preview { text-align: center; color: var(--text-muted); padding: 2rem; font-style: italic; }
+
+        /* Validation Report Modal */
+        .validation-modal { max-width: 700px; width: 95%; }
+        .validation-file-block {
+            background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem;
+        }
+        .validation-file-header {
+            display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;
+            font-weight: 600; font-size: 0.95rem;
+        }
+        .validation-file-header .badge {
+            padding: 0.15rem 0.6rem; border-radius: 20px; font-size: 0.7rem;
+            font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .badge.ok { background: rgba(16,185,129,0.15); color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
+        .badge.warn { background: rgba(245,158,11,0.15); color: var(--warning); border: 1px solid rgba(245,158,11,0.3); }
+        .badge.fail { background: rgba(239,68,68,0.15); color: var(--error); border: 1px solid rgba(239,68,68,0.3); }
+        .validation-item {
+            display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.4rem 0;
+            font-size: 0.85rem; color: #cbd5e1;
+        }
+        .validation-item .vi-icon { flex-shrink: 0; width: 16px; height: 16px; margin-top: 2px; }
+        .validation-item.error .vi-icon { color: var(--error); }
+        .validation-item.warning .vi-icon { color: var(--warning); }
+        .validation-item.ok .vi-icon { color: var(--success); }
+        .validation-summary-bar {
+            display: flex; gap: 1.5rem; padding: 0.75rem 1rem; margin-bottom: 1rem;
+            background: rgba(0,0,0,0.2); border-radius: 8px; font-size: 0.85rem;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .validation-summary-bar span { display: flex; align-items: center; gap: 0.4rem; }
+        .vs-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .vs-dot.ok { background: var(--success); }
+        .vs-dot.warn { background: var(--warning); }
+        .vs-dot.fail { background: var(--error); }
+
+    </style>
+</head>
+<body>
+
+    <div class="ambient-glow"></div>
+    <div class="ambient-glow two"></div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="container">
+        <header>
+            <h1>Processador de CSV Pro</h1>
+            <p>Filtre e exporte arquivos para Excel com alta performance</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" id="btn-processTab" onclick="switchTab('processTab')">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                Processador de CSV
+            </button>
+            <button class="tab-btn" id="btn-valTab" onclick="switchTab('valTab')">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                Validador IBPT
+            </button>
+        </div>
+
+        <main class="card" id="processTab">
+            
+            <!-- Step 1: Input Files -->
+            <div class="step active" id="step1">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <h2>Arquivos Não Processados</h2>
+                </div>
+                <p class="step-desc">Arraste seus arrquivos CSV ou clique para selecionar.</p>
+                
+                <div class="input-group">
+                    <div class="drop-zone" id="dropZone">
+                        <svg class="icon" style="width:48px;height:48px" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        <p>Arraste arquivos e solte aqui</p>
+                        <span>ou clique para buscar do computador</span>
+                        <input type="file" id="csvFiles" multiple accept=".csv, text/csv">
+                    </div>
+
+                    <ul id="fileList" class="file-list"></ul>
+                </div>
+            </div>
+
+
+            <!-- Action Area -->
+            <div class="action-section">
+                <button id="processBtn" class="btn btn-primary" disabled>
+                    <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <div class="loader"></div>
+                    <span>Processar e Exportar Tudo</span>
+                </button>
+
+                <!-- Progress Section -->
+                <div class="progress-container" id="progressContainer">
+                    <div class="progress-header">
+                        <span id="progressText">Processando arquivo 1 de 10...</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                    <div class="stats-grid" id="statsGrid" style="display:none;">
+                        <div class="stat-box success">
+                            <div class="stat-value" id="statExported">0</div>
+                            <div class="stat-label">Arquivos XLS</div>
+                        </div>
+                        <div class="stat-box info">
+                            <div class="stat-value" id="statRows">0</div>
+                            <div class="stat-label">Linhas Lidas</div>
+                        </div>
+                        <div class="stat-box removed">
+                            <div class="stat-value" id="statRemoved">0</div>
+                            <div class="stat-label">Linhas Removidas</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Aba Validador IBPT -->
+        <main class="card" id="valTab" style="display: none;">
+            <div class="step active">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <h2>Arquivos Prontos para Validação</h2>
+                </div>
+                <p class="step-desc">Selecione arquivos CSV ou XLS já processados para verificação avulsa.</p>
+                
+                <div class="input-group">
+                    <div class="drop-zone" id="valDropZone">
+                        <svg class="icon" style="width:48px;height:48px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        <p>Arraste arquivos e solte aqui</p>
+                        <span>ou clique para buscar do computador (CSV, XLS, XLSX)</span>
+                        <input type="file" id="valFiles" multiple accept=".csv, text/csv, .xls, .xlsx, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                    </div>
+
+                    <ul id="valFileList" class="file-list"></ul>
+                </div>
+            </div>
+
+            <!-- Action Area Validator -->
+            <div class="action-section">
+                <button id="validateOnlyBtn" class="btn btn-primary" disabled>
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <div class="loader" id="valLoader"></div>
+                    <span>Executar Validação IBPT</span>
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <!-- Preview Modal -->
+    <div class="modal-overlay" id="previewModal">
+        <div class="modal preview-modal">
+            <div class="modal-header">
+                <h3>Visualização de Dados <small style="font-weight:normal;opacity:0.7"> (5 Primeiras Linhas)</small></h3>
+                <button class="modal-close" onclick="closeModal('previewModal')"><svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive" id="previewTableContainer">
+                    <div class="empty-preview">Carregando dados...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('previewModal')">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Validation Report Modal -->
+    <div class="modal-overlay" id="validationModal">
+        <div class="modal validation-modal">
+            <div class="modal-header">
+                <h3>📋 Relatório de Validação IBPT</h3>
+                <button class="modal-close" onclick="closeModal('validationModal')"><svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+            </div>
+            <div class="modal-body" id="validationReportBody">
+                <div class="empty-preview">Nenhuma validação executada.</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('validationModal')">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const fileInput = document.getElementById('csvFiles');
+        const fileList = document.getElementById('fileList');
+        const dropZone = document.getElementById('dropZone');
+        const processBtn = document.getElementById('processBtn');
+        const toastContainer = document.getElementById('toastContainer');
+
+        // Progress Elements
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const progressPercent = document.getElementById('progressPercent');
+        const statsGrid = document.getElementById('statsGrid');
+        
+
+        let selectedFiles = [];
+        let fileReports = [];
+
+        // Modals
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        // Toasts
+        function showToast(title, message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            let iconSvg = '';
+            if(type === 'success') iconSvg = '<svg class="icon toast-icon" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';
+            if(type === 'error') iconSvg = '<svg class="icon toast-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+            if(type === 'info') iconSvg = '<svg class="icon toast-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+
+            toast.innerHTML = `
+                ${iconSvg}
+                <div class="toast-content">
+                    <div class="toast-title">${title}</div>
+                    <div>${message}</div>
+                </div>
+            `;
+            
+            toastContainer.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('closing');
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+        }
+
+        // Drag & Drop
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            handleFiles(files);
+        });
+
+        fileInput.addEventListener('change', function() {
+            handleFiles(this.files);
+        });
+
+        function handleFiles(files) {
+            selectedFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.csv'));
+            
+            fileList.innerHTML = '';
+            
+            if (selectedFiles.length > 0) {
+                
+                selectedFiles.forEach((file, index) => {
+                    const li = document.createElement('li');
+                    li.className = 'file-item';
+                    
+                    li.innerHTML = `
+                        <div class="file-item-left">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                            <span class="file-item-name" title="${file.name}">${file.name}</span>
+                        </div>
+                        <button class="btn-preview" title="Pré-visualizar dados" onclick="previewFile(${index}, event)">
+                            <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        </button>
+                    `;
+                    fileList.appendChild(li);
+                });
+                showToast('Arquivos Carregados', `${selectedFiles.length} arquivo(s) CSV pronto(s) para processamento.`, 'success');
+            } else {
+                if(files.length > 0) showToast('Arquivos Inválidos', 'Por favor, selecione apenas arquivos .csv', 'error');
+            }
+            checkReady();
+        }
+
+        // Preview Logic
+        window.previewFile = function(index, event) {
+            event.stopPropagation();
+            const file = selectedFiles[index];
+            const encoding = 'UTF-8';
+            const previewModal = document.getElementById('previewModal');
+            const previewContainer = document.getElementById('previewTableContainer');
+            
+            previewContainer.innerHTML = '<div class="empty-preview"><div class="loader" style="display:inline-block;border-top-color:var(--text-main)"></div><div style="margin-top:10px">Lendo arquivo...</div></div>';
+            document.getElementById('previewModal').classList.add('active');
+
+            Papa.parse(file, {
+                header: true,
+                preview: 5, // Apenas as 5 primeiras
+                skipEmptyLines: true,
+                encoding: encoding,
+                complete: function(results) {
+                    if(!results.data || results.data.length === 0) {
+                        previewContainer.innerHTML = '<div class="empty-preview">Arquivo vazio ou formato não suportado.</div>';
+                        return;
+                    }
+
+                    let tableHtml = '<table><thead><tr>';
+                    results.meta.fields.forEach(f => { tableHtml += `<th>${f}</th>`; });
+                    tableHtml += '</tr></thead><tbody>';
+
+                    results.data.forEach(row => {
+                        tableHtml += '<tr>';
+                        results.meta.fields.forEach(f => {
+                            let val = row[f] || '';
+                            tableHtml += `<td title="${val}">${val}</td>`;
+                        });
+                        tableHtml += '</tr>';
+                    });
+                    tableHtml += '</tbody></table>';
+
+                    previewContainer.innerHTML = tableHtml;
+                },
+                error: function() {
+                    previewContainer.innerHTML = '<div class="empty-preview">Erro ao ler o CSV. Tente alterar a codificação.</div>';
+                }
+            });
+        };
+
+
+        function checkReady() {
+            if (selectedFiles.length > 0) {
+                processBtn.disabled = false;
+            } else {
+                processBtn.disabled = true;
+            }
+        }
+
+        // Global stats variables
+        let globalRowsRead = 0;
+        let globalRowsRemoved = 0;
+
+        // Processing
+        processBtn.addEventListener('click', async () => {
+            if (!selectedFiles.length) return;
+
+            // UI feedback
+            processBtn.classList.add('processing');
+            processBtn.disabled = true;
+            progressContainer.style.display = 'block';
+            statsGrid.style.display = 'none';
+            progressBar.style.width = '0%';
+            
+            globalRowsRead = 0;
+            globalRowsRemoved = 0;
+            fileReports = [];
+            let successCount = 0;
+            let errors = [];
+
+            // Configuração Fixa Original
+            const targetCol = 'tipo';
+            const targetVal = '0';
+            const rmHeader = true;
+            const encodingType = 'UTF-8';
+
+            const zip = new JSZip();
+
+            // Processamento Principal
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                const fileNum = i + 1;
+                
+                progressText.textContent = `Processando ${file.name} (${fileNum}/${selectedFiles.length})...`;
+                
+                try {
+                    const result = await processFile(file, null, targetCol, targetVal, rmHeader, encodingType);
+                    zip.file(result.fileName, result.xlsBuffer);
+                    successCount++;
+                    
+                    // Valida os dados processados e armazena o relatório
+                    const report = validateIBPTProcessedData(file.name, result.finalRows);
+                    fileReports.push(report);
+                } catch (err) {
+                    console.error(`Erro em ${file.name}:`, err);
+                    errors.push(file.name);
+                }
+
+                // Update Progress Bar
+                const percent = Math.round((fileNum / selectedFiles.length) * 100);
+                progressBar.style.width = `${percent}%`;
+                progressPercent.textContent = `${percent}%`;
+            }
+
+            // Gerar ZIP e abrir diálogo para salvar
+            if (successCount > 0) {
+                progressText.textContent = "Gerando arquivo ZIP...";
+                try {
+                    const zipBlob = await zip.generateAsync({ type: 'blob' });
+
+                    // Tenta usar o diálogo nativo "Salvar como" do sistema
+                    if (window.showSaveFilePicker) {
+                        try {
+                            const fileHandle = await window.showSaveFilePicker({
+                                suggestedName: 'arquivos_processados.zip',
+                                types: [{
+                                    description: 'Arquivo ZIP',
+                                    accept: { 'application/zip': ['.zip'] }
+                                }]
+                            });
+                            const writable = await fileHandle.createWritable();
+                            await writable.write(zipBlob);
+                            await writable.close();
+                        } catch (pickerErr) {
+                            if (pickerErr.name === 'AbortError') return;
+                            // Fallback caso o picker falhe (ex: protocolo file://)
+                            const url = URL.createObjectURL(zipBlob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'arquivos_processados.zip';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        }
+                    } else {
+                        // Navegador não suporta showSaveFilePicker
+                        const url = URL.createObjectURL(zipBlob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'arquivos_processados.zip';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }
+                } catch (zipErr) {
+                    console.error('Erro ao gerar ZIP:', zipErr);
+                    showToast('Erro no ZIP', 'Não foi possível gerar o arquivo ZIP.', 'error');
+                }
+            }
+
+            // Finished
+            processBtn.classList.remove('processing');
+            processBtn.disabled = false;
+            progressText.textContent = "Processamento concluído!";
+            
+            // Show Stats
+            statsGrid.style.display = 'grid';
+            document.getElementById('statExported').textContent = successCount;
+            document.getElementById('statRows').textContent = globalRowsRead;
+            document.getElementById('statRemoved').textContent = globalRowsRemoved;
+
+            if (errors.length === 0) {
+                showToast('Operação Concluída', `${successCount} arquivo(s) foram convertidos e baixados como ZIP.`, 'success');
+            } else if (successCount > 0) {
+                showToast('Operação Parcial', `${successCount} arquivo(s) convertidos. Erros em: ${errors.length} arquivos.`, 'warning');
+            } else {
+                showToast('Erro Crítico', `Os arquivos não puderam ser analisados. Base Incorreta ou Encoding Incompatível.`, 'error');
+            }
+
+            // Exibir modal de validações IBPT com os relatórios coletados
+            showIBPTValidationReport(fileReports);
+        });
+
+        async function processFile(file, dirHandle, targetCol, targetVal, rmHeader, encodingType) {
+            return new Promise((resolve, reject) => {
+                Papa.parse(file, {
+                    header: false,
+                    skipEmptyLines: true,
+                    encoding: encodingType,
+                    complete: async function(results) {
+                        try {
+                            const rows = results.data;
+                            if (!rows || rows.length === 0) return resolve();
+                            
+                            globalRowsRead += rows.length;
+                            
+                            const headerRow = rows[0];
+                            const tipoIndex = headerRow.findIndex(cell => cell && typeof cell === 'string' && cell.replace(/[\uFEFF]/g, '').trim().toLowerCase() === targetCol);
+                            
+                            let finalRows = [];
+                            
+                            // Process lines
+                            // Começa no index 1 se remover cabeçalho OU começa no 0 se quiser mante-lo.
+                            const startIdx = rmHeader ? 1 : 0;
+
+                            for (let i = startIdx; i < rows.length; i++) {
+                                // Evitar processar o cabeçalho se ele será mantido 
+                                // (não queremos filtrar a palavra 'tipo' vs o targetVal se for index 0)
+                                if (i === 0 && !rmHeader) {
+                                    finalRows.push(rows[0]);
+                                    continue;
+                                }
+
+                                const row = rows[i];
+                                
+                                if (tipoIndex !== -1) {
+                                    const cellValue = String(row[tipoIndex] || '').replace(/[\uFEFF]/g, '').trim();
+                                    if (cellValue === targetVal) {
+                                        finalRows.push(row);
+                                    } else {
+                                        globalRowsRemoved++;
+                                    }
+                                } else {
+                                    // Se a coluna não for encontrada, mantemos tudo
+                                    finalRows.push(row);
+                                }
+                            }
+
+                            if (rmHeader) globalRowsRemoved++; // +1 por conta do cabeçalho
+
+                            if (finalRows.length === 0) finalRows.push([]); // Cria XLS vazio
+
+                            // SheetJS to Web Workbook
+                            const newSheet = XLSX.utils.aoa_to_sheet(finalRows);
+                            const newWorkbook = XLSX.utils.book_new();
+                            XLSX.utils.book_append_sheet(newWorkbook, newSheet, "Dados Processados");
+                            
+                            const xlsBuffer = XLSX.write(newWorkbook, { bookType: 'biff8', type: 'array' });
+                            const newFileName = file.name.replace(/\.[^/.]+$/, "") + ".xls";
+                            
+                            resolve({ finalRows, xlsBuffer, fileName: newFileName });
+                        } catch (error) {
+                            reject(error);
+                        }
+                    },
+                    error: function(err) {
+                        reject(err);
+                    }
+                });
+            });
+        }
+
+        // ============================================================
+        // VALIDAÇÕES IBPT - Pré-validações de importação da tabela IBPT
+        // ============================================================
+        const IBPT_EXPECTED_COLUMNS = 13;
+        // Índices fixos das colunas (sem cabeçalho):
+        //  0=Codigo NCM, 1=EX, 2=Tipo, 3=Descricao,
+        //  4=Nac.Federal, 5=Imp.Federal, 6=Estadual, 7=Municipal,
+        //  8=Vigencia Inicio, 9=Vigencia Fim, 10=Chave, 11=Versao, 12=Fonte
+
+        function showIBPTValidationReport(fileReports) {
+            const reportBody = document.getElementById('validationReportBody');
+            let totalErrors = 0;
+            let totalWarnings = 0;
+            let totalOk = 0;
+
+            for (const result of fileReports) {
+                totalErrors += result.errors.length;
+                totalWarnings += result.warnings.length;
+                if (result.errors.length === 0 && result.warnings.length === 0) totalOk++;
+            }
+
+            // Montar HTML do relatório
+            let html = `<div class="validation-summary-bar">
+                <span><span class="vs-dot ok"></span> ${totalOk} OK</span>
+                <span><span class="vs-dot warn"></span> ${totalWarnings} Avisos</span>
+                <span><span class="vs-dot fail"></span> ${totalErrors} Erros</span>
+            </div>`;
+
+            for (const report of fileReports) {
+                const hasErrors = report.errors.length > 0;
+                const hasWarnings = report.warnings.length > 0;
+                const badgeClass = hasErrors ? 'fail' : (hasWarnings ? 'warn' : 'ok');
+                const badgeText = hasErrors ? 'ERRO' : (hasWarnings ? 'AVISO' : 'OK');
+
+                html += `<div class="validation-file-block">
+                    <div class="validation-file-header">
+                        <span class="badge ${badgeClass}">${badgeText}</span>
+                        <span>${report.fileName}</span>
+                    </div>`;
+
+                if (!hasErrors && !hasWarnings) {
+                    html += makeValidationItem('ok', 'Arquivo dentro do padrão IBPT esperado.');
+                }
+
+                for (const err of report.errors) {
+                    html += makeValidationItem('error', err);
+                }
+                for (const warn of report.warnings) {
+                    html += makeValidationItem('warning', warn);
+                }
+
+                html += `</div>`;
+            }
+
+            reportBody.innerHTML = html;
+            document.getElementById('validationModal').classList.add('active');
+
+            if (totalErrors > 0) {
+                showToast('Validação IBPT', `${totalErrors} erro(s) encontrado(s). Verifique o relatório.`, 'error');
+            } else if (totalWarnings > 0) {
+                showToast('Validação IBPT', `${totalWarnings} aviso(s). Verifique o relatório.`, 'info');
+            } else {
+                showToast('Validação IBPT', 'Todos os arquivos estão dentro do padrão esperado.', 'success');
+            }
+        }
+
+        function makeValidationItem(type, message) {
+            const icons = {
+                ok: '<svg class="vi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
+                error: '<svg class="vi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
+                warning: '<svg class="vi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>'
+            };
+            return `<div class="validation-item ${type}">${icons[type]}<span>${message}</span></div>`;
+        }
+
+        function validateIBPTProcessedData(fileName, rows) {
+            const report = { fileName: fileName, errors: [], warnings: [] };
+
+            // Validação 1: Extensão do arquivo exportado será XLS, mas validamos nome original
+            const ext = fileName.split('.').pop().toLowerCase();
+            if (ext !== 'csv') {
+                report.errors.push(`Extensão inválida: .${ext} — esperado .csv de entrada.`);
+            }
+
+            if (!rows || rows.length === 0) {
+                report.errors.push('Arquivo resultante vazio após processamento/filtragem.');
+                return report;
+            }
+
+            // O preview final no XLS usa um fallback array vazio [] em row 0 se não houver dados,
+            // mas acima validamos length 0. E finalRows sempre tem pelo menos [] (if finalRows.length===0 => [[]])
+            const firstRow = rows[0];
+            if (!firstRow || firstRow.length === 0) {
+                report.errors.push('Arquivo sem dados legíveis nas colunas.');
+                return report;
+            }
+
+            // Validação 2: Quantidade de colunas (esperado: 13)
+            if (firstRow.length < IBPT_EXPECTED_COLUMNS) {
+                report.errors.push(`Número de colunas insuficiente: ${firstRow.length} encontradas, ${IBPT_EXPECTED_COLUMNS} esperadas.`);
+            } else if (firstRow.length > IBPT_EXPECTED_COLUMNS) {
+                report.warnings.push(`Número de colunas excedente: ${firstRow.length} encontradas, ${IBPT_EXPECTED_COLUMNS} esperadas.`);
+            }
+
+            // Índices fixos (sem cabeçalho)
+            const ncmIndex = 0;
+            const exIndex = 1;
+            const tipoIndex = 2;
+            const dateStartIndex = 8;
+            const dateEndIndex = 9;
+
+            // Validação de dados (amostragem das primeiras 50 linhas)
+            const sampleSize = Math.min(rows.length, 50);
+            let ncmIssues = 0;
+            let exIssues = 0;
+            let dateIssues = 0;
+            let tipoIssues = 0;
+            const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/;
+            const dateYMD = /^\d{8}$/;
+
+            for (let i = 0; i < sampleSize; i++) {
+                const row = rows[i];
+                if (!row) continue;
+
+                // Validação 4: Código NCM — deve ter 8 dígitos numéricos
+                const ncm = String(row[ncmIndex] || '').replace(/[\uFEFF\s.\-]/g, '').trim();
+                if (ncm && (!/^\d+$/.test(ncm) || ncm.length > 8)) {
+                    ncmIssues++;
+                }
+
+                // Validação 5: EX — se preenchido, deve ter 2 dígitos
+                const ex = String(row[exIndex] || '').replace(/[\uFEFF\s]/g, '').trim();
+                if (ex && (!/^\d+$/.test(ex) || ex.length > 2)) {
+                    exIssues++;
+                }
+
+                // Validação 6: Tipo — deve ser "0" para mercadorias. Se os dados já foram filtrados,
+                // na teoria não deverá aparecer != "0", a menos que a coluna tipo mude de indice.
+                if (String(row[tipoIndex] || '').replace(/[\uFEFF]/g, '').trim() !== '0') {
+                    tipoIssues++;
+                }
+
+                // Validação 7: Datas de vigência — formato esperado dd/MM/yy ou dd/MM/yyyy
+                const dateStart = String(row[dateStartIndex] || '').trim();
+                const dateEnd = String(row[dateEndIndex] || '').trim();
+
+                if (dateStart && !dateRegex.test(dateStart) && !dateYMD.test(dateStart)) {
+                    dateIssues++;
+                }
+                if (dateEnd && !dateRegex.test(dateEnd) && !dateYMD.test(dateEnd)) {
+                    dateIssues++;
+                }
+            }
+
+            // Gerar mensagens com base na amostra
+            if (ncmIssues > 0) {
+                report.warnings.push(`${ncmIssues} linha(s) com Código NCM fora do padrão (esperado: até 8 dígitos numéricos).`);
+            }
+            if (exIssues > 0) {
+                report.warnings.push(`${exIssues} linha(s) com campo EX fora do padrão (esperado: 2 dígitos numéricos quando preenchido).`);
+            }
+            if (tipoIssues > 0) {
+                report.warnings.push(`${tipoIssues} linha(s) processadas com Tipo diferente de "0" (esperado apenas "0" após filtro). Verificar configuração de separador de colunas.`);
+            }
+            if (dateIssues > 0) {
+                report.warnings.push(`${dateIssues} campo(s) de data fora do formato esperado (dd/MM/yy ou yyyyMMdd).`);
+            }
+
+            return report;
+        }
+
+        // ============================================================
+        // LOGICA DA ABA "VALIDADOR IBPT"
+        // ============================================================
+        
+        // TAB NAVIGATION
+        function switchTab(tabId) {
+            document.getElementById('processTab').style.display = 'none';
+            document.getElementById('valTab').style.display = 'none';
+            document.getElementById('btn-processTab').classList.remove('active');
+            document.getElementById('btn-valTab').classList.remove('active');
+
+            document.getElementById(tabId).style.display = 'block';
+            document.getElementById(`btn-${tabId}`).classList.add('active');
+        }
+
+        const valFileInput = document.getElementById('valFiles');
+        const valFileList = document.getElementById('valFileList');
+        const valDropZone = document.getElementById('valDropZone');
+        const validateOnlyBtn = document.getElementById('validateOnlyBtn');
+        const valLoader = document.getElementById('valLoader');
+        let selectedValFiles = [];
+
+        // Drag & Drop para o Validador
+        valDropZone.addEventListener('click', () => valFileInput.click());
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            valDropZone.addEventListener(eventName, function(e) { e.preventDefault(); e.stopPropagation(); }, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            valDropZone.addEventListener(eventName, () => valDropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            valDropZone.addEventListener(eventName, () => valDropZone.classList.remove('dragover'), false);
+        });
+
+        valDropZone.addEventListener('drop', (e) => handleValFiles(e.dataTransfer.files));
+        valFileInput.addEventListener('change', function() { handleValFiles(this.files); });
+
+        function handleValFiles(files) {
+            selectedValFiles = Array.from(files).filter(f => {
+                const ext = f.name.toLowerCase().split('.').pop();
+                return ['csv', 'xls', 'xlsx'].includes(ext);
+            });
+            
+            valFileList.innerHTML = '';
+            
+            if (selectedValFiles.length > 0) {
+                validateOnlyBtn.disabled = false;
+                selectedValFiles.forEach((file) => {
+                    const li = document.createElement('li');
+                    li.className = 'file-item';
+                    li.innerHTML = `
+                        <div class="file-item-left">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                            <span class="file-item-name" title="${file.name}">${file.name}</span>
+                        </div>
+                    `;
+                    valFileList.appendChild(li);
+                });
+                showToast('Validador IBPT', `${selectedValFiles.length} arquivo(s) carregado(s) para validação.`, 'success');
+            } else {
+                validateOnlyBtn.disabled = true;
+                if(files.length > 0) showToast('Arquivos Inválidos', 'Selecione apenas arquivos .csv, .xls ou .xlsx', 'error');
+            }
+        }
+
+        async function parseValFileForValidation(file) {
+            return new Promise((resolve, reject) => {
+                const ext = file.name.split('.').pop().toLowerCase();
+                if (ext === 'csv') {
+                    Papa.parse(file, {
+                        header: false,
+                        skipEmptyLines: true,
+                        encoding: 'UTF-8',
+                        complete: function(results) { resolve(results.data); },
+                        error: function(err) { reject(err); }
+                    });
+                } else if (ext === 'xls' || ext === 'xlsx') {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        try {
+                            const data = new Uint8Array(e.target.result);
+                            const workbook = XLSX.read(data, {type: 'array'});
+                            const firstSheetName = workbook.SheetNames[0];
+                            const worksheet = workbook.Sheets[firstSheetName];
+                            const rows = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                            resolve(rows);
+                        } catch (err) { reject(err); }
+                    };
+                    reader.onerror = function(err) { reject(err); };
+                    reader.readAsArrayBuffer(file);
+                } else {
+                    resolve([]); 
+                }
+            });
+        }
+
+        validateOnlyBtn.addEventListener('click', async () => {
+            if (selectedValFiles.length === 0) return;
+            
+            validateOnlyBtn.disabled = true;
+            valLoader.style.display = 'block';
+            let reports = [];
+
+            for (const file of selectedValFiles) {
+                try {
+                    const rows = await parseValFileForValidation(file);
+                    // Como a func `validateIBPTProcessedData` acusa erro de ext, mudamos o nome fake caso 
+                    // queiramos burlar a verificação '.csv', mas a nova spec lida com CSVs e XLS processados.
+                    // Para manter consistência com o que está escrito no validador ("Esperado .csv de entrada"),
+                    // nós apenas passamos o arquivo como ele é. O validador original emitiu erro se `.xls`, 
+                    // mas o usuário dropou XLS sabendo. Vamos interceptar isso.
+                    const report = validateIBPTProcessedData(file.name, rows);
+                    
+                    // Remover erro de extensão caso venha de um arquivo .xls ou .xlsx nativo no validador
+                    report.errors = report.errors.filter(err => !err.includes('Extensão inválida'));
+
+                    reports.push(report);
+                } catch (error) {
+                    console.error('Erro ao ler arquivo para validacao', error);
+                    reports.push({ fileName: file.name, errors: ['Erro crítico ao tentar analisar o arquivo: ' + error], warnings: [] });
+                }
+            }
+
+            validateOnlyBtn.disabled = false;
+            valLoader.style.display = 'none';
+
+            showIBPTValidationReport(reports);
+        });
+
+    </script>
+</body>
+</html>
