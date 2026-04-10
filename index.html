@@ -849,7 +849,13 @@
             if (successCount > 0) {
                 progressText.textContent = "Gerando arquivo ZIP...";
                 try {
-                    const zipBlob = await zip.generateAsync({ type: 'blob' });
+                    const zipBlob = await zip.generateAsync({ 
+                        type: 'blob',
+                        compression: 'DEFLATE',
+                        compressionOptions: {
+                            level: 6 // Nível de compressão (1-9)
+                        }
+                    });
 
                     if (fileHandle) {
                         // Salvar no local escolhido pelo showSaveFilePicker
