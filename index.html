@@ -86,28 +86,7 @@
             position: relative;
         }
 
-        .btn-settings {
-            position: absolute;
-            right: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: var(--text-main);
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .btn-settings:hover {
-            background: rgba(255,255,255,0.1);
-            color: var(--accent);
-            transform: translateY(-50%) rotate(45deg);
-        }
+
 
         h1 {
             font-weight: 700;
@@ -243,12 +222,7 @@
         }
         .btn-preview:hover { color: var(--accent); background: rgba(255,255,255,0.05); }
 
-        .destination-display {
-            background: rgba(0, 0, 0, 0.2); padding: 0.75rem 1rem; border-radius: 8px;
-            display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: #cbd5e1;
-            margin-top: 0.75rem; border: 1px dashed rgba(255, 255, 255, 0.1);
-        }
-        .destination-display.has-path { border-style: solid; border-color: var(--accent); background: rgba(99, 102, 241, 0.05); }
+
 
         .action-section { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid rgba(255, 255, 255, 0.05); }
 
@@ -400,22 +374,29 @@
 
         <main class="card" id="processTab">
             
-            <!-- Step 1: Input Files -->
+            <!-- Step 1: Input ZIP -->
             <div class="step active" id="step1">
                 <div class="step-header">
                     <div class="step-number">1</div>
-                    <h2>Arquivos Não Processados</h2>
+                    <h2>Arquivo ZIP do IBPT</h2>
                 </div>
-                <p class="step-desc">Arraste seus arrquivos CSV ou clique para selecionar.</p>
+                <p class="step-desc">Arraste o arquivo .zip baixado do site do IBPT ou clique para selecionar.</p>
                 
                 <div class="input-group">
                     <div class="drop-zone" id="dropZone">
                         <svg class="icon" style="width:48px;height:48px" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                        <p>Arraste arquivos e solte aqui</p>
-                        <span>ou clique para buscar do computador</span>
-                        <input type="file" id="csvFiles" multiple accept=".csv, text/csv">
+                        <p>Arraste o arquivo .zip aqui</p>
+                        <span>ou clique para buscar do computador (.zip)</span>
+                        <input type="file" id="csvFiles" accept=".zip">
                     </div>
 
+                    <div id="zipInfo" style="display:none; margin-top:0.75rem; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.2); border-radius:8px; padding:0.75rem 1rem; font-size:0.85rem; color:#cbd5e1;">
+                        <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+                            <svg style="width:16px;height:16px;color:var(--accent)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            <span id="zipInfoText" style="font-weight:600;"></span>
+                        </div>
+                        <div id="zipStatesList" style="display:flex; flex-wrap:wrap; gap:0.3rem;"></div>
+                    </div>
                     <ul id="fileList" class="file-list"></ul>
                 </div>
             </div>
@@ -470,8 +451,8 @@
                     <div class="drop-zone" id="valDropZone">
                         <svg class="icon" style="width:48px;height:48px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                         <p>Arraste arquivos e solte aqui</p>
-                        <span>ou clique para buscar do computador (CSV, XLS, XLSX)</span>
-                        <input type="file" id="valFiles" multiple accept=".csv, text/csv, .xls, .xlsx, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                        <span>ou clique para buscar do computador (CSV, XLS, XLSX, ZIP)</span>
+                        <input type="file" id="valFiles" multiple accept=".csv, .xls, .xlsx, .zip, .rar">
                     </div>
 
                     <ul id="valFileList" class="file-list"></ul>
@@ -538,10 +519,15 @@
         const progressText = document.getElementById('progressText');
         const progressPercent = document.getElementById('progressPercent');
         const statsGrid = document.getElementById('statsGrid');
-        
-
         let selectedFiles = [];
         let fileReports = [];
+
+        // Utilidades
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
 
         // Modals
         function closeModal(id) {
@@ -600,21 +586,123 @@
             handleFiles(this.files);
         });
 
-        function handleFiles(files) {
-            selectedFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.csv'));
-            
+        // Lista dos 27 estados brasileiros
+        const BRAZILIAN_STATES = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
+
+        async function handleFiles(files) {
+            const fileArr = Array.from(files);
             fileList.innerHTML = '';
-            
-            if (selectedFiles.length > 0) {
-                
+            document.getElementById('zipInfo').style.display = 'none';
+            document.getElementById('zipStatesList').innerHTML = '';
+            selectedFiles = [];
+
+            // Verificar se é um ZIP
+            const zipFile = fileArr.find(f => f.name.toLowerCase().endsWith('.zip'));
+            if (!zipFile) {
+                if (fileArr.length > 0) showToast('Arquivo Inválido', 'Por favor, selecione um arquivo .zip do IBPT.', 'error');
+                checkReady();
+                return;
+            }
+
+            // Mostrar feedback de carregamento
+            showToast('Lendo ZIP', `Extraindo arquivos de ${zipFile.name}...`, 'info');
+
+            try {
+                const arrayBuffer = await zipFile.arrayBuffer();
+                const zip = await JSZip.loadAsync(arrayBuffer);
+
+                // Filtrar apenas arquivos que começam com "TabelaIBPTax"
+                const ibptFiles = [];
+                for (const [path, entry] of Object.entries(zip.files)) {
+                    if (entry.dir) continue;
+                    const fileName = path.split('/').pop();
+                    if (fileName.startsWith('TabelaIBPTax') && fileName.toLowerCase().endsWith('.csv')) {
+                        const csvData = await entry.async('arraybuffer');
+                        const blob = new Blob([csvData], { type: 'text/csv' });
+                        const file = new File([blob], fileName, { type: 'text/csv' });
+                        ibptFiles.push(file);
+                    }
+                }
+
+                // Extrair sigla do estado de cada nome de arquivo
+                // Padrão: TabelaIBPTax{UF}... ex: TabelaIBPTaxAC26.1.G.csv
+                const foundStates = [];
+                for (const file of ibptFiles) {
+                    const match = file.name.match(/^TabelaIBPTax([A-Z]{2})/);
+                    if (match) foundStates.push(match[1]);
+                }
+
+                // Validação 1: Verificar se encontrou arquivos TabelaIBPTax
+                if (ibptFiles.length === 0) {
+                    showToast('ZIP Inválido', 'Nenhum arquivo TabelaIBPTax encontrado dentro do ZIP.', 'error');
+                    checkReady();
+                    return;
+                }
+
+                // Validação 2: Verificar 27 estados
+                const missingStates = BRAZILIAN_STATES.filter(uf => !foundStates.includes(uf));
+                const extraStates = foundStates.filter(uf => !BRAZILIAN_STATES.includes(uf));
+
+                if (missingStates.length > 0) {
+                    // Mostrar erro de validação
+                    let errorHtml = `<div style="margin-bottom:1rem">`;
+                    errorHtml += `<p style="color:var(--error);font-weight:600;font-size:1.1rem;margin-bottom:0.75rem">⚠️ Validação do ZIP falhou</p>`;
+                    errorHtml += `<p style="margin-bottom:0.5rem">Encontrados <strong>${ibptFiles.length}</strong> arquivos TabelaIBPTax de <strong>27</strong> esperados.</p>`;
+                    errorHtml += `<p style="margin-bottom:0.75rem">Faltam <strong>${missingStates.length}</strong> estado(s):</p>`;
+                    errorHtml += `<div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:1rem">`;
+                    missingStates.forEach(uf => {
+                        errorHtml += `<span style="background:rgba(239,68,68,0.15);color:var(--error);border:1px solid rgba(239,68,68,0.3);padding:0.2rem 0.6rem;border-radius:6px;font-size:0.85rem;font-weight:600">${uf}</span>`;
+                    });
+                    errorHtml += `</div>`;
+                    errorHtml += `<p style="color:var(--text-muted);font-size:0.85rem">Verifique se o arquivo ZIP baixado do IBPT está completo e tente novamente.</p>`;
+                    errorHtml += `</div>`;
+
+                    // Mostrar estados encontrados
+                    errorHtml += `<p style="font-size:0.85rem;margin-bottom:0.5rem;color:var(--text-muted)">Estados encontrados (${foundStates.length}):</p>`;
+                    errorHtml += `<div style="display:flex;flex-wrap:wrap;gap:0.3rem">`;
+                    BRAZILIAN_STATES.forEach(uf => {
+                        if (foundStates.includes(uf)) {
+                            errorHtml += `<span style="background:rgba(16,185,129,0.15);color:var(--success);border:1px solid rgba(16,185,129,0.3);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.8rem;font-weight:500">${uf}</span>`;
+                        } else {
+                            errorHtml += `<span style="background:rgba(239,68,68,0.15);color:var(--error);border:1px solid rgba(239,68,68,0.3);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.8rem;font-weight:500;text-decoration:line-through">${uf}</span>`;
+                        }
+                    });
+                    errorHtml += `</div>`;
+
+                    const reportBody = document.getElementById('validationReportBody');
+                    reportBody.innerHTML = errorHtml;
+                    document.getElementById('validationModal').classList.add('active');
+                    showToast('ZIP Incompleto', `Faltam ${missingStates.length} estado(s): ${missingStates.join(', ')}`, 'error');
+                    checkReady();
+                    return;
+                }
+
+                // Validação OK — preencher selectedFiles
+                selectedFiles = ibptFiles;
+
+                // Exibir info do ZIP
+                const zipInfoEl = document.getElementById('zipInfo');
+                const zipInfoText = document.getElementById('zipInfoText');
+                const zipStatesList = document.getElementById('zipStatesList');
+                zipInfoEl.style.display = 'block';
+                zipInfoText.textContent = `${ibptFiles.length} tabelas IBPT extraídas de ${escapeHtml(zipFile.name)}`;
+                zipStatesList.innerHTML = '';
+                BRAZILIAN_STATES.forEach(uf => {
+                    const badge = document.createElement('span');
+                    badge.style.cssText = 'background:rgba(16,185,129,0.15);color:var(--success);border:1px solid rgba(16,185,129,0.3);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.8rem;font-weight:500';
+                    badge.textContent = uf;
+                    zipStatesList.appendChild(badge);
+                });
+
+                // Preencher lista de arquivos
                 selectedFiles.forEach((file, index) => {
                     const li = document.createElement('li');
                     li.className = 'file-item';
-                    
+                    const safeName = escapeHtml(file.name);
                     li.innerHTML = `
                         <div class="file-item-left">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                            <span class="file-item-name" title="${file.name}">${file.name}</span>
+                            <span class="file-item-name" title="${safeName}">${safeName}</span>
                         </div>
                         <button class="btn-preview" title="Pré-visualizar dados" onclick="previewFile(${index}, event)">
                             <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -622,9 +710,12 @@
                     `;
                     fileList.appendChild(li);
                 });
-                showToast('Arquivos Carregados', `${selectedFiles.length} arquivo(s) CSV pronto(s) para processamento.`, 'success');
-            } else {
-                if(files.length > 0) showToast('Arquivos Inválidos', 'Por favor, selecione apenas arquivos .csv', 'error');
+
+                showToast('ZIP Validado ✅', `27 estados encontrados. ${ibptFiles.length} arquivos prontos para processamento.`, 'success');
+
+            } catch (err) {
+                console.error('Erro ao processar ZIP:', err);
+                showToast('Erro no ZIP', 'Não foi possível ler o arquivo ZIP. Verifique se o arquivo não está corrompido.', 'error');
             }
             checkReady();
         }
@@ -638,7 +729,7 @@
             const previewContainer = document.getElementById('previewTableContainer');
             
             previewContainer.innerHTML = '<div class="empty-preview"><div class="loader" style="display:inline-block;border-top-color:var(--text-main)"></div><div style="margin-top:10px">Lendo arquivo...</div></div>';
-            document.getElementById('previewModal').classList.add('active');
+            previewModal.classList.add('active');
 
             Papa.parse(file, {
                 header: true,
@@ -658,7 +749,7 @@
                     results.data.forEach(row => {
                         tableHtml += '<tr>';
                         results.meta.fields.forEach(f => {
-                            let val = row[f] || '';
+                            let val = escapeHtml(String(row[f] || ''));
                             tableHtml += `<td title="${val}">${val}</td>`;
                         });
                         tableHtml += '</tr>';
@@ -672,7 +763,6 @@
                 }
             });
         };
-
 
         function checkReady() {
             if (selectedFiles.length > 0) {
@@ -689,6 +779,23 @@
         // Processing
         processBtn.addEventListener('click', async () => {
             if (!selectedFiles.length) return;
+
+            // Pedir local de salvamento ANTES de processar (para manter o contexto do gesto do usuário)
+            let fileHandle = null;
+            if (window.showSaveFilePicker) {
+                try {
+                    fileHandle = await window.showSaveFilePicker({
+                        suggestedName: 'arquivos_processados.zip',
+                        types: [{
+                            description: 'Arquivo ZIP',
+                            accept: { 'application/zip': ['.zip'] }
+                        }]
+                    });
+                } catch (pickerErr) {
+                    if (pickerErr.name === 'AbortError') return; // usuário cancelou
+                    fileHandle = null; // fallback
+                }
+            }
 
             // UI feedback
             processBtn.classList.add('processing');
@@ -719,7 +826,7 @@
                 progressText.textContent = `Processando ${file.name} (${fileNum}/${selectedFiles.length})...`;
                 
                 try {
-                    const result = await processFile(file, null, targetCol, targetVal, rmHeader, encodingType);
+                    const result = await processFile(file, targetCol, targetVal, rmHeader, encodingType);
                     zip.file(result.fileName, result.xlsBuffer);
                     successCount++;
                     
@@ -737,39 +844,19 @@
                 progressPercent.textContent = `${percent}%`;
             }
 
-            // Gerar ZIP e abrir diálogo para salvar
+            // Gerar ZIP e salvar no local escolhido
             if (successCount > 0) {
                 progressText.textContent = "Gerando arquivo ZIP...";
                 try {
                     const zipBlob = await zip.generateAsync({ type: 'blob' });
 
-                    // Tenta usar o diálogo nativo "Salvar como" do sistema
-                    if (window.showSaveFilePicker) {
-                        try {
-                            const fileHandle = await window.showSaveFilePicker({
-                                suggestedName: 'arquivos_processados.zip',
-                                types: [{
-                                    description: 'Arquivo ZIP',
-                                    accept: { 'application/zip': ['.zip'] }
-                                }]
-                            });
-                            const writable = await fileHandle.createWritable();
-                            await writable.write(zipBlob);
-                            await writable.close();
-                        } catch (pickerErr) {
-                            if (pickerErr.name === 'AbortError') return;
-                            // Fallback caso o picker falhe (ex: protocolo file://)
-                            const url = URL.createObjectURL(zipBlob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = 'arquivos_processados.zip';
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-                        }
+                    if (fileHandle) {
+                        // Salvar no local escolhido pelo showSaveFilePicker
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(zipBlob);
+                        await writable.close();
                     } else {
-                        // Navegador não suporta showSaveFilePicker
+                        // Fallback: download padrão do navegador
                         const url = URL.createObjectURL(zipBlob);
                         const a = document.createElement('a');
                         a.href = url;
@@ -808,7 +895,7 @@
             showIBPTValidationReport(fileReports);
         });
 
-        async function processFile(file, dirHandle, targetCol, targetVal, rmHeader, encodingType) {
+        async function processFile(file, targetCol, targetVal, rmHeader, encodingType) {
             return new Promise((resolve, reject) => {
                 Papa.parse(file, {
                     header: false,
@@ -817,7 +904,7 @@
                     complete: async function(results) {
                         try {
                             const rows = results.data;
-                            if (!rows || rows.length === 0) return resolve();
+                            if (!rows || rows.length === 0) return reject(new Error('Arquivo vazio ou sem dados legíveis.'));
                             
                             globalRowsRead += rows.length;
                             
@@ -831,12 +918,6 @@
                             const startIdx = rmHeader ? 1 : 0;
 
                             for (let i = startIdx; i < rows.length; i++) {
-                                // Evitar processar o cabeçalho se ele será mantido 
-                                // (não queremos filtrar a palavra 'tipo' vs o targetVal se for index 0)
-                                if (i === 0 && !rmHeader) {
-                                    finalRows.push(rows[0]);
-                                    continue;
-                                }
 
                                 const row = rows[i];
                                 
@@ -1089,10 +1170,18 @@
         valFileInput.addEventListener('change', function() { handleValFiles(this.files); });
 
         function handleValFiles(files) {
+            const validExts = ['csv', 'xls', 'xlsx', 'zip', 'rar'];
             selectedValFiles = Array.from(files).filter(f => {
                 const ext = f.name.toLowerCase().split('.').pop();
-                return ['csv', 'xls', 'xlsx'].includes(ext);
+                return validExts.includes(ext);
             });
+            
+            // Verificar se há .rar e avisar
+            const hasRar = selectedValFiles.some(f => f.name.toLowerCase().endsWith('.rar'));
+            if (hasRar) {
+                selectedValFiles = selectedValFiles.filter(f => !f.name.toLowerCase().endsWith('.rar'));
+                showToast('RAR não suportado', 'Arquivos .rar não podem ser lidos no navegador. Por favor, converta para .zip e tente novamente.', 'error');
+            }
             
             valFileList.innerHTML = '';
             
@@ -1101,19 +1190,79 @@
                 selectedValFiles.forEach((file) => {
                     const li = document.createElement('li');
                     li.className = 'file-item';
+                    const safeName = escapeHtml(file.name);
+                    const isZip = file.name.toLowerCase().endsWith('.zip');
+                    const iconColor = isZip ? 'var(--warning)' : 'var(--accent)';
                     li.innerHTML = `
                         <div class="file-item-left">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                            <span class="file-item-name" title="${file.name}">${file.name}</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:${iconColor}"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                            <span class="file-item-name" title="${safeName}">${safeName}${isZip ? ' <small style="opacity:0.5">(ZIP)</small>' : ''}</span>
                         </div>
                     `;
                     valFileList.appendChild(li);
                 });
-                showToast('Validador IBPT', `${selectedValFiles.length} arquivo(s) carregado(s) para validação.`, 'success');
+                const zipCount = selectedValFiles.filter(f => f.name.toLowerCase().endsWith('.zip')).length;
+                const otherCount = selectedValFiles.length - zipCount;
+                let msg = '';
+                if (zipCount > 0 && otherCount > 0) {
+                    msg = `${otherCount} arquivo(s) + ${zipCount} ZIP(s) carregado(s) para valida\u00e7\u00e3o.`;
+                } else if (zipCount > 0) {
+                    msg = `${zipCount} arquivo(s) ZIP carregado(s). Os arquivos internos ser\u00e3o extra\u00eddos e validados.`;
+                } else {
+                    msg = `${otherCount} arquivo(s) carregado(s) para valida\u00e7\u00e3o.`;
+                }
+                showToast('Validador IBPT', msg, 'success');
             } else {
                 validateOnlyBtn.disabled = true;
-                if(files.length > 0) showToast('Arquivos Inválidos', 'Selecione apenas arquivos .csv, .xls ou .xlsx', 'error');
+                if(files.length > 0 && !hasRar) showToast('Arquivos Inv\u00e1lidos', 'Selecione arquivos .csv, .xls, .xlsx ou .zip', 'error');
             }
+        }
+
+        // Extrai arquivos de dentro de um ZIP e retorna array de {name, data (ArrayBuffer)}
+        async function extractFilesFromZip(zipFile) {
+            const arrayBuffer = await zipFile.arrayBuffer();
+            const zip = await JSZip.loadAsync(arrayBuffer);
+            const extractedFiles = [];
+            const validExts = ['csv', 'xls', 'xlsx'];
+
+            for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
+                if (zipEntry.dir) continue;
+                const ext = relativePath.split('.').pop().toLowerCase();
+                if (!validExts.includes(ext)) continue;
+                // Pegar somente o nome do arquivo (sem pastas)
+                const fileName = relativePath.split('/').pop();
+                const data = await zipEntry.async('arraybuffer');
+                extractedFiles.push({ name: fileName, data: data, ext: ext });
+            }
+            return extractedFiles;
+        }
+
+        // Parseia um arquivo extraído do ZIP (ArrayBuffer) para validação
+        function parseExtractedFileForValidation(fileName, arrayBuffer, ext) {
+            return new Promise((resolve, reject) => {
+                if (ext === 'csv') {
+                    // Decodificar ArrayBuffer para string
+                    const decoder = new TextDecoder('UTF-8');
+                    const csvString = decoder.decode(arrayBuffer);
+                    Papa.parse(csvString, {
+                        header: false,
+                        skipEmptyLines: true,
+                        complete: function(results) { resolve(results.data); },
+                        error: function(err) { reject(err); }
+                    });
+                } else if (ext === 'xls' || ext === 'xlsx') {
+                    try {
+                        const data = new Uint8Array(arrayBuffer);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const rows = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                        resolve(rows);
+                    } catch (err) { reject(err); }
+                } else {
+                    resolve([]);
+                }
+            });
         }
 
         async function parseValFileForValidation(file) {
@@ -1142,7 +1291,7 @@
                     reader.onerror = function(err) { reject(err); };
                     reader.readAsArrayBuffer(file);
                 } else {
-                    resolve([]); 
+                    resolve([]);
                 }
             });
         }
@@ -1155,22 +1304,44 @@
             let reports = [];
 
             for (const file of selectedValFiles) {
+                const ext = file.name.split('.').pop().toLowerCase();
+
+                // Se for ZIP, extrair os arquivos internos e validar cada um
+                if (ext === 'zip') {
+                    try {
+                        const extractedFiles = await extractFilesFromZip(file);
+                        if (extractedFiles.length === 0) {
+                            reports.push({ fileName: file.name, errors: ['Nenhum arquivo v\u00e1lido (.csv, .xls, .xlsx) encontrado dentro do ZIP.'], warnings: [] });
+                            continue;
+                        }
+                        for (const ef of extractedFiles) {
+                            try {
+                                const rows = await parseExtractedFileForValidation(ef.name, ef.data, ef.ext);
+                                const report = validateIBPTProcessedData(ef.name, rows);
+                                report.errors = report.errors.filter(err => !err.includes('Extens\u00e3o inv\u00e1lida'));
+                                report.fileName = `${ef.name} <small style="opacity:0.5">(de ${escapeHtml(file.name)})</small>`;
+                                reports.push(report);
+                            } catch (innerErr) {
+                                console.error(`Erro ao validar ${ef.name} do ZIP:`, innerErr);
+                                reports.push({ fileName: `${ef.name} (de ${file.name})`, errors: ['Erro ao ler arquivo extra\u00eddo do ZIP: ' + innerErr], warnings: [] });
+                            }
+                        }
+                    } catch (zipErr) {
+                        console.error('Erro ao abrir ZIP:', zipErr);
+                        reports.push({ fileName: file.name, errors: ['Erro ao abrir arquivo ZIP: ' + zipErr], warnings: [] });
+                    }
+                    continue;
+                }
+
+                // Arquivo avulso (csv, xls, xlsx)
                 try {
                     const rows = await parseValFileForValidation(file);
-                    // Como a func `validateIBPTProcessedData` acusa erro de ext, mudamos o nome fake caso 
-                    // queiramos burlar a verificação '.csv', mas a nova spec lida com CSVs e XLS processados.
-                    // Para manter consistência com o que está escrito no validador ("Esperado .csv de entrada"),
-                    // nós apenas passamos o arquivo como ele é. O validador original emitiu erro se `.xls`, 
-                    // mas o usuário dropou XLS sabendo. Vamos interceptar isso.
                     const report = validateIBPTProcessedData(file.name, rows);
-                    
-                    // Remover erro de extensão caso venha de um arquivo .xls ou .xlsx nativo no validador
-                    report.errors = report.errors.filter(err => !err.includes('Extensão inválida'));
-
+                    report.errors = report.errors.filter(err => !err.includes('Extens\u00e3o inv\u00e1lida'));
                     reports.push(report);
                 } catch (error) {
                     console.error('Erro ao ler arquivo para validacao', error);
-                    reports.push({ fileName: file.name, errors: ['Erro crítico ao tentar analisar o arquivo: ' + error], warnings: [] });
+                    reports.push({ fileName: file.name, errors: ['Erro cr\u00edtico ao tentar analisar o arquivo: ' + error], warnings: [] });
                 }
             }
 
